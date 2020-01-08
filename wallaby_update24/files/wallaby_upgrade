@@ -1,0 +1,128 @@
+#!/bin/bash
+
+PART_BOOT=/dev/mmcblk0p1
+PART_ROOTFS1=/dev/mmcblk0p2
+PART_ROOTFS2=/dev/mmcblk0p3
+PART_USERFS=/dev/mmcblk0p4
+
+#mkdir -p /media/usbdisk
+#mount /dev/sda1 /media/usbdisk
+
+# Check arguments
+DEFAULT_BIN_PATH=/mnt/kipr-console-image-pepper.tar.bz2
+if [ $# -lt 1 ];
+then
+	echo "Expected upgrade image filepath as an argument, using default $DEFAULT_BIN_PATH"
+	BIN_PATH=$DEFAULT_BIN_PATH
+else
+	BIN_PATH=$1
+fi
+
+# look for expected files
+if [ ! -f $BIN_PATH ];
+then
+	echo "Expected upgrade binary file at $BIN_PATH"
+	exit
+else
+	echo "Found $BIN_PATH"
+fi
+
+MNT_BOOT=/media/boot
+if [ ! -d $MNT_BOOT ];
+then
+	echo "Creating directory $MNT_BOOT"
+	mkdir $MNT_BOOT
+fi
+
+UENV_TXT=${MNT_BOOT}/uEnv.txt
+UENV1_TXT=${MNT_BOOT}/uEnv1.txt
+UENV2_TXT=${MNT_BOOT}/uEnv2.txt
+if [ ! -f $UENV_TXT ];
+then
+	echo "$UENV_TXT is missing, trying to mount the boot partition"
+	mount -t vfat $PART_BOOT $MNT_BOOT
+
+	if [ ! -f $UENV_TXT ];
+	then
+		echo "ERROR: $UENV_TXT is still missing"
+		exit
+	else
+		echo "Found $UENV_TXT"
+	fi
+
+else
+	echo "Found $UENV_TXT"
+fi
+
+if [ ! -f $UENV1_TXT ];
+then
+	echo "$UENV1_TXT is missing"
+	exit
+else
+	echo "Found $UENV1_TXT"
+fi
+
+if [ ! -f $UENV2_TXT ];
+then
+	echo "$UENV2_TXT is missing"
+	exit
+else
+	echo "Found $UENV2_TXT"
+fi
+
+BOOTCMD="$(dmesg | grep Kernel\ command\ line | grep -q root=/dev/mmcblk0p2)"
+greprc=$?
+if [[ $greprc -eq 0 ]];
+then
+	# currently on partition 1
+        echo "currently using boot partition 1"
+	NEW_PART=2
+else
+	# currently on partition 2
+	NEW_PART=1
+        echo "currently using boot partition 2"
+fi
+
+echo "New Partition will be ${NEW_PART}"
+
+# mount other partition
+MNT_OTHER_ROOTFS=/media/other_rootfs
+if [ ! -d $MNT_OTHER_ROOTFS ];
+then
+	mkdir $MNT_OTHER_ROOTFS
+fi
+
+if [ $NEW_PART -eq 1 ];
+then
+	DEV_OTHER_ROOTFS=$PART_ROOTFS1
+else
+	DEV_OTHER_ROOTFS=$PART_ROOTFS2
+fi
+
+mount $DEV_OTHER_ROOTFS $MNT_OTHER_ROOTFS
+
+# whipe before unpacking tar.bz2 over old rootfs?
+rm -rf $MNT_OTHER_ROOTFS/*
+
+# unpack new files for rootfs
+CMD="tar -xjf $BIN_PATH --warning=no-timestamp -C $MNT_OTHER_ROOTFS"
+echo $CMD
+eval $CMD
+
+# cp uEnv1.txt over uEnv.txt
+# or uEnv2.txt over uEnv.txt
+if [ $NEW_PART -eq 1 ];
+then
+	CMD="cp $UENV1_TXT $UENV_TXT"
+	echo "$CMD"
+	eval $CMD
+else
+	CMD="cp $UENV2_TXT $UENV_TXT"
+	echo "$CMD"
+	eval $CMD
+fi
+
+sync
+umount $MNT_OTHER_ROOTFS
+reboot
+

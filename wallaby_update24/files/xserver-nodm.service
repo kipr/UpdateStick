@@ -1,0 +1,11 @@
+[Unit]
+Description=Xserver startup with a display manager
+After=hdmi.service
+Requires=hdmi.service
+
+[Service]
+EnvironmentFile=/etc/default/xserver-nodm
+ExecStart=/etc/X11/Xserver
+
+[Install]
+Alias=display-manager.service
