@@ -1,5 +1,6 @@
 # UpdateStick
 For updating KIPR controllers (specifically the Wallaby).
+
 The Wombat update is not current, see https://github.com/kipr/kipr-update
 
 ### Instructions:
